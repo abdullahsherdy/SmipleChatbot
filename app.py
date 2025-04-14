@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, jsonify
-from local_match import search_local_response, save_question, last_user_tag, get_detailed_response
-from external_search import external_fallback, is_museum_related
 from deep_translator import GoogleTranslator
 import langdetect
+from chat import get_gemini_response
+from local_match import search_intents, get_detailed_response, search_local_questions, save_question
+from external_search import search_wikipedia, search_duckduckgo, is_museum_related
 
 app = Flask(__name__)
 
@@ -19,32 +20,30 @@ def get_bot_response():
         if not user_message:
             return jsonify({"response": "❌ لم يتم استقبال رسالة صالحة!"}), 400
 
-        # Detect and translate if needed
-        lang = langdetect.detect(user_message)
-        message_ar = GoogleTranslator(source='auto', target='ar').translate(user_message) if lang != "ar" else user_message
+        detected_lang = langdetect.detect(user_message)
+        translated_message = GoogleTranslator(source='auto', target='ar').translate(user_message) if detected_lang != "ar" else user_message
 
-        # Check if user wants more detail
-        if get_detailed_response(message_ar):
-            return jsonify({"response": get_detailed_response(message_ar)})
+        response, tag = search_intents(translated_message)
 
-        # Local check (intents or previous questions)
-        response, tag = search_local_response(message_ar)
-        if response:
-            return jsonify({"response": GoogleTranslator(source="ar", target=lang).translate(response) if lang != "ar" else response})
+        if not response:
+            response = search_local_questions(translated_message)
 
-        # External fallback
-        if is_museum_related(message_ar):
-            response = external_fallback(message_ar)
-            save_question(message_ar, response)
-        else:
-            response = "❌ هذا السؤال خارج نطاق تخصصي، أنا هنا لمساعدتك فيما يخص المتحف المصري فقط."
+        if not response:
+            if is_museum_related(translated_message):
+                response = search_wikipedia(translated_message)
+                if not response:
+                    response = get_gemini_response(translated_message)
+                if not response:
+                    response = search_duckduckgo(translated_message)
+            else:
+                response = "❌ هذا السؤال خارج نطاق تخصصي، أنا هنا لمساعدتك فيما يخص المتحف المصري فقط."
 
-        final_response = GoogleTranslator(source="ar", target=lang).translate(response) if lang != "ar" else response
-        return jsonify({"response": final_response})
+            save_question(translated_message, response)
+
+        return jsonify({"response": response})
 
     except Exception as e:
-        print(f"❌ خطأ: {e}")
-        return jsonify({"response": "❌ حدث خطأ في النظام، حاول لاحقًا."}), 500
+        return jsonify({"response": f"حدث خطأ أثناء المعالجة: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=True)

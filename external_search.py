@@ -1,41 +1,25 @@
-from duckduckgo_search import DDGS
 import wikipedia
-import google.generativeai as genai
-from dotenv import load_dotenv
-import os
+import duckduckgo_search
 
-load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+# Related keywords to validate museum context
+museum_keywords = ["متحف", "التحنيط", "فرعوني", "تمثال", "آثار", "مومياء", "مصر القديمة", "معرض"]
+
+def is_museum_related(user_input):
+    return any(keyword in user_input for keyword in museum_keywords)
 
 def search_wikipedia(query):
     try:
         wikipedia.set_lang("ar")
-        return wikipedia.summary(query, sentences=2)
-    except:
-        return None
-
-def search_gemini(query):
-    try:
-        model = genai.GenerativeModel("gemini-pro")
-        res = model.generate_content(f"أجب باختصار حول: {query}")
-        return res.text if query.lower() in res.text.lower() else None
+        summary = wikipedia.summary(query, sentences=2)
+        return f"📚 من ويكيبيديا:", summary
     except Exception as e:
-        print("Gemini error:", e)
         return None
 
 def search_duckduckgo(query):
     try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=2))
-        return results[0]['body'] if results else None
-    except:
+        results = duckduckgo_search.ddg(query, region='wt-wt', safesearch='Moderate', max_results=1)
+        if results:
+            result = results[0]
+            return f"🔎 من DuckDuckGo:", result.get("body") or result.get("snippet")
+    except Exception as e:
         return None
-
-def external_fallback(query):
-    return search_wikipedia(query) or search_gemini(query) or search_duckduckgo(query) or "❌ لم أتمكن من العثور على إجابة."
-
-def is_museum_related(q):
-    keywords = ["متحف", "فرعونية", "آثار", "توت", "رمسيس", "الأهرامات", "تمثال", "قاعة", "حتشبسوت"]
-    return any(k in q.lower() for k in keywords)
