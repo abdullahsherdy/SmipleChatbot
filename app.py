@@ -1,11 +1,14 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 from deep_translator import GoogleTranslator
 import langdetect
+
 from chat import get_gemini_response
 from local_match import search_intents, get_detailed_response, search_local_questions, save_question
 from external_search import search_wikipedia, search_duckduckgo, is_museum_related
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS
 
 @app.route('/')
 def home():
